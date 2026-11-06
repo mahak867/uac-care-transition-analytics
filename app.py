@@ -166,6 +166,15 @@ def alert(kind: str, html: str) -> None:
                 f'<div>{html}</div></div>', unsafe_allow_html=True)
 
 
+def _dates(t: pd.DataFrame) -> pd.DataFrame:
+    """Show datetime columns as plain YYYY-MM-DD in tables."""
+    t = t.copy()
+    for c in t.columns:
+        if pd.api.types.is_datetime64_any_dtype(t[c]):
+            t[c] = t[c].dt.strftime("%Y-%m-%d")
+    return t
+
+
 # ── data loading ──────────────────────────────────────────────────────────────
 
 @st.cache_data(show_spinner=False)
@@ -501,7 +510,7 @@ with tabs[2]:
         alert("red", f'<b>{len(stag)}</b> stagnation period(s) detected where discharge '
             f'effectiveness collapsed below 40% of the rolling baseline.')
         st.dataframe(
-            stag.rename(columns={"MeanMetric": "Mean Discharge Effectiveness"}),
+            _dates(stag.rename(columns={"MeanMetric": "Mean Discharge Effectiveness"})),
             width="stretch",
             hide_index=True,
         )
@@ -516,7 +525,7 @@ with tabs[2]:
     else:
         alert("amber", f'<b>{len(drops)}</b> sudden drop event(s) where discharges fell '
             f'below 50% of the prior 30-day rolling mean.')
-        st.dataframe(drops, width="stretch", hide_index=True)
+        st.dataframe(_dates(drops), width="stretch", hide_index=True)
 
     st.markdown("---")
     st.subheader("Weekly Pattern Analysis (Weekday vs Weekend)")
@@ -541,8 +550,9 @@ with tabs[2]:
         color="DayType",
         color_discrete_map={"Weekday": C["hhs"], "Weekend": C["cbp"]},
         title="Discharge Effectiveness: Weekday vs Weekend",
+        labels={"DayType": "", "DischargeEffectiveness": "Discharge Effectiveness"},
     )
-    fig_box.update_layout(height=350, showlegend=False)
+    fig_box.update_layout(height=350, showlegend=False, yaxis_tickformat=".1%")
     st.plotly_chart(fig_box, width="stretch")
 
 
@@ -568,10 +578,12 @@ with tabs[3]:
         ("Transferred", "Avg Daily Transfers",     C["transferred"]),
     ]:
         fig_m.add_trace(
-            go.Scatter(x=monthly["YearMonth"], y=monthly[col], name=name,
-                       mode="lines+markers", line=dict(color=color, width=2))
+            go.Scatter(x=monthly["Date"], y=monthly[col], name=name,
+                       mode="lines+markers", line=dict(color=color, width=2),
+                       marker=dict(size=8, line=dict(width=2, color=C["surface"])),
+                       hovertemplate="%{y:,.1f}/day")
         )
-    fig_m.update_layout(hovermode="x unified", height=380,
+    fig_m.update_layout(hovermode="x unified", height=380, xaxis_hoverformat="%b %Y",
                         yaxis_title="Children / day (monthly avg)",
                         legend=dict(orientation="h", yanchor="bottom", y=1.02))
     st.plotly_chart(fig_m, width="stretch")
@@ -586,6 +598,7 @@ with tabs[3]:
         "Discharged":   "Avg Discharges/day",
         "HHSCare":      "Avg HHS Population",
     }).drop(columns=["Date"])
+    monthly_disp = monthly_disp[["Month"] + [c for c in monthly_disp.columns if c != "Month"]]
     for col in monthly_disp.columns[1:]:
         monthly_disp[col] = monthly_disp[col].round(1)
     st.dataframe(monthly_disp, width="stretch", hide_index=True)
@@ -634,6 +647,7 @@ with tabs[4]:
     metric_choice = st.selectbox(
         "Metric",
         ["DischargeEffectiveness", "TransferEfficiency", "PipelineThroughput"],
+        format_func=lambda m: {"DischargeEffectiveness": "Discharge Effectiveness", "TransferEfficiency": "Transfer Efficiency", "PipelineThroughput": "Pipeline Throughput"}[m],
     )
 
     result = compare_periods(df, metric_choice, split_ts)
@@ -649,7 +663,7 @@ with tabs[4]:
             fig_v.add_trace(go.Violin(y=grp, name=label, fillcolor=color,
                                       line_color=color, opacity=0.7, box_visible=True,
                                       meanline_visible=True))
-        fig_v.update_layout(height=350, yaxis_title=metric_choice,
+        fig_v.update_layout(height=350, yaxis_title={"DischargeEffectiveness": "Discharge Effectiveness", "TransferEfficiency": "Transfer Efficiency", "PipelineThroughput": "Pipeline Throughput"}[metric_choice], yaxis_tickformat=".1%",
                             violinmode="overlay", showlegend=True)
         st.plotly_chart(fig_v, width="stretch")
     else:
@@ -662,6 +676,11 @@ with tabs[4]:
         df[["TransferEfficiency", "DischargeEffectiveness", "PipelineThroughput"]]
         .describe()
         .round(4)
+        .rename(columns={"TransferEfficiency": "Transfer Efficiency",
+                         "DischargeEffectiveness": "Discharge Effectiveness",
+                         "PipelineThroughput": "Pipeline Throughput"},
+                index={"count": "Reports", "mean": "Mean", "std": "Std dev", "min": "Min",
+                       "25%": "25th pct", "50%": "Median", "75%": "75th pct", "max": "Max"})
     )
     st.dataframe(desc, width="stretch")
 

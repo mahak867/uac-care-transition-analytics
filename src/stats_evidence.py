@@ -38,10 +38,11 @@ class RegimeComparison:
         direction = "higher" if self.median_b > self.median_a else "lower"
         sig_word  = "significantly" if self.significant else "slightly"
 
+        p_txt = "p < 0.001" if self.p_value < 0.001 else f"p = {self.p_value:.3f}"
         return (
             f"Median {self.label_b} ({self.median_b:.4f}) is {sig_word} {direction} "
             f"than median {self.label_a} ({self.median_a:.4f}) "
-            f"(p = {self.p_value:.4f}, n={self.n_a}/{self.n_b})."
+            f"({p_txt}; n = {self.n_a} {self.label_a} vs {self.n_b} {self.label_b} reports)."
         )
 
 
