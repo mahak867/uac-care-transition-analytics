@@ -1,0 +1,12 @@
+# Care Transition Efficiency & Placement Outcome Analytics
+#
+#   python3 -m venv .venv
+#   source .venv/bin/activate
+#   pip install -r requirements.txt
+#   streamlit run app.py
+
+streamlit==1.63.0
+pandas==2.2.2
+numpy==1.26.4
+plotly==5.22.0
+scipy==1.17.1
