@@ -48,13 +48,15 @@ This paper reframes the question. We do not ask "how many children are in care?"
 
 ### 3.1 Derived KPIs
 
-Three ratio metrics are computed daily from raw columns:
+Five KPIs are computed for each report from the raw columns: three flow ratios and two rolling indicators.
 
 | KPI | Formula | Interpretation |
 |-----|---------|----------------|
 | Transfer Efficiency Ratio (TER) | `Transferred ÷ CBP Custody` | Speed of CBP → HHS handoff |
 | Discharge Effectiveness Index (DEI) | `Discharged ÷ HHS Care` | Daily placement throughput relative to population |
 | Pipeline Throughput Rate (PTR) | `(Transferred + Discharged) ÷ (Apprehended + Transferred)` | Net system movement |
+| Backlog Accumulation Rate (BAR) | Change in the 7-report rolling mean of HHS Care, per report | Delay severity: positive = backlog growing, negative = clearing |
+| Outcome Stability Score (OSS) | `100 × max(0, 1 − σ/μ)` of DEI over the last 30 reports (σ/μ = coefficient of variation) | Placement consistency: 100 = perfectly steady, 0 = spread as large as the mean |
 
 ### 3.2 Stagnation Detection
 
@@ -104,6 +106,15 @@ The population peaked at **11,516 children on December 20, 2023** — the highes
 **Discharge Effectiveness:** The 2.37% mean reflects the structural relationship between daily discharges (~173 children/day during peak operations) and a population of 6,000–11,000. This metric is most useful for detecting *changes* in placement efficiency, not for absolute benchmarking.
 
 **Pipeline Throughput:** The mean of 164% means exits outnumbered entries on a typical report, driven by high discharge volumes. Because transfers count as both an exit from CBP and an entry to HHS, this ratio is best read as a trend indicator, not as a literal net flow.
+
+| Metric | Mean | Median | Min | Max |
+|--------|------|--------|-----|-----|
+| Backlog Accumulation Rate (children/report) | −5.7 | +3.1 | −383.6 | +278.0 |
+| Outcome Stability Score (0–100) | 69.7 | 75.5 | 6.5 | 83.5 |
+
+**Backlog Accumulation:** The backlog grew on 54.3% of reports, but the mean is negative (−5.7) because the clearing phases were much steeper than the growth phases. By year, the average was +20.6 in 2023 (accumulation), −18.7 in 2024 and −17.2 in 2025 (clearing). The largest single-report growth was +278.0 (January 22, 2023); the steepest clearance was −383.6 (January 15, 2024). On the latest report (December 21, 2025) the rate was +6.4, meaning slight re-accumulation.
+
+**Outcome Stability:** Placement consistency held steady through 2023 (average 77.2) and 2024 (77.1), then fell to 54.9 in 2025. The lowest score, 6.5, came on April 13, 2025, just after the March 2025 stagnation event (Section 4.4). The latest score is 52.9. In other words, discharges in 2025 were both lower and less predictable.
 
 ### 4.3 Regime Shift: Pre- vs Post-July 2024
 

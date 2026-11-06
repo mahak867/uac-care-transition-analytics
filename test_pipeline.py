@@ -94,3 +94,15 @@ def test_regime_comparison_detects_a_real_shift():
     eff = np.r_[rng.normal(0.03, 0.003, 61), rng.normal(0.006, 0.002, 59)]
     t = se.compare_periods(series(dates, DischargeEffectiveness=eff), "DischargeEffectiveness", "2025-01-01", "before", "after")
     assert t.valid and t.significant and t.median_b < t.median_a
+
+
+# ── outcome stability score ──────────────────────────────────────────────────
+
+def test_outcome_stability_score_is_100_for_constant_and_lower_for_volatile_outcomes():
+    dates = pd.date_range("2024-01-01", periods=40, freq="D")
+    steady = series(dates, DischargeEffectiveness=[0.03] * 40)
+    volatile = series(dates, DischargeEffectiveness=[0.01, 0.05] * 20)
+
+    assert pm.outcome_stability_score(steady).iloc[-1] == pytest.approx(100.0)
+    v = pm.outcome_stability_score(volatile).iloc[-1]
+    assert 0 <= v < 50          # std ≈ 0.02, mean 0.03 → CV ≈ 0.68 → score ≈ 32

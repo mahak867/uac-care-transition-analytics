@@ -23,6 +23,7 @@ from src.pipeline_metrics import (
     stagnation_periods,
     sudden_drops,
     backlog_rate,
+    outcome_stability_score,
 )
 from src.forecast import capacity_gap, linear_forecast
 from src.stats_evidence import compare_periods, weekday_vs_weekend
@@ -102,9 +103,19 @@ with st.sidebar:
     df = df_full[(df_full["Date"] >= d0) & (df_full["Date"] <= d1)].copy()
 
     st.markdown("---")
-    show_ratios   = st.toggle("Show ratio metrics",    value=True)
+    st.markdown("**Ratio metrics**")
+    show_te = st.toggle("Transfer Efficiency (Transfers ÷ CBP Custody)", value=True)
+    show_de = st.toggle("Discharge Effectiveness (Discharges ÷ HHS Care)", value=True)
+    show_pt = st.toggle("Pipeline Throughput (Exits ÷ Entries)", value=True)
     show_forecast = st.toggle("Show discharge forecast", value=True)
     clearance_target = st.slider("Clearance target (days)", 10, 180, 30)
+
+    st.markdown("---")
+    st.markdown("**Alert thresholds**")
+    thr_te = st.slider("Min Transfer Efficiency (%)", 0, 150, 50, step=5) / 100
+    thr_de = st.slider("Min Discharge Effectiveness (%)", 0.0, 7.0, 1.0, step=0.1) / 100
+    thr_pt = st.slider("Min Pipeline Throughput (%)", 0, 300, 100, step=10) / 100
+    thr_bl = st.slider("Max backlog growth (children/day, 7-day avg)", 0, 200, 25, step=5)
 
     st.markdown("---")
     st.caption(f"**Records:** {len(df):,}  |  **Range:** {d0.date()} → {d1.date()}")
@@ -165,6 +176,52 @@ with col5:
         help=f"Need {cg['required_daily_discharge']:.0f}/day; current {cg['current_daily_discharge']:.0f}/day",
     )
 
+bl_series = backlog_rate(df)
+stab_series = outcome_stability_score(df)
+bl_latest = bl_series.iloc[-1]
+stab_latest = stab_series.iloc[-1]
+
+k1, k2, k3 = st.columns([1, 1, 3])
+with k1:
+    st.metric(
+        "Backlog Accumulation Rate",
+        f"{bl_latest:+.1f}/day" if not np.isnan(bl_latest) else "N/A",
+        help="Change in the 7-day average HHS population per report. "
+             "Positive = backlog growing, negative = clearing.",
+    )
+with k2:
+    st.metric(
+        "Outcome Stability Score",
+        f"{stab_latest:.0f} / 100" if not np.isnan(stab_latest) else "N/A",
+        help="100 × (1 − coefficient of variation) of Discharge Effectiveness over the "
+             "last 30 reports. Higher = more consistent placements.",
+    )
+with k3:
+    checks = [
+        ("Transfer Efficiency", latest["TransferEfficiency"], thr_te, "below", f"{thr_te:.0%}", "{:.1%}"),
+        ("Discharge Effectiveness", latest["DischargeEffectiveness"], thr_de, "below", f"{thr_de:.1%}", "{:.2%}"),
+        ("Pipeline Throughput", latest["PipelineThroughput"], thr_pt, "below", f"{thr_pt:.0%}", "{:.0%}"),
+        ("Backlog growth", bl_latest, thr_bl, "above", f"{thr_bl:+.0f}/day", "{:+.1f}/day"),
+    ]
+    breaches = []
+    for name, val, thr, direction, thr_txt, fmt in checks:
+        if np.isnan(val):
+            continue
+        if (direction == "below" and val < thr) or (direction == "above" and val > thr):
+            breaches.append(f"<b>{name}</b> is {fmt.format(val)} ({direction} the {thr_txt} threshold)")
+    if breaches:
+        st.markdown(
+            f'<div class="alert-red">🚨 <b>{len(breaches)} threshold alert(s)</b> on the latest report '
+            f'({latest["Date"].date()}):<br>' + "<br>".join(breaches) + "</div>",
+            unsafe_allow_html=True,
+        )
+    else:
+        st.markdown(
+            f'<div class="alert-green">✅ All metrics are within your alert thresholds on the latest '
+            f'report ({latest["Date"].date()}).</div>',
+            unsafe_allow_html=True,
+        )
+
 st.markdown("---")
 
 # ── tabs ──────────────────────────────────────────────────────────────────────
@@ -221,7 +278,7 @@ with tabs[0]:
 
     with c2:
         st.subheader("7-Day Rolling HHS Backlog Rate")
-        bl = backlog_rate(df)
+        bl = bl_series
         fig3 = go.Figure()
         fig3.add_trace(
             go.Bar(
@@ -231,6 +288,8 @@ with tabs[0]:
             )
         )
         fig3.add_hline(y=0, line_dash="dot", line_color="grey")
+        fig3.add_hline(y=thr_bl, line_dash="dash", line_color="#d9534f",
+                       annotation_text=f"Alert: +{thr_bl}/day", annotation_position="top left")
         fig3.update_layout(height=320, yaxis_title="Net daily change")
         st.plotly_chart(fig3, use_container_width=True)
 
@@ -242,23 +301,33 @@ with tabs[0]:
 with tabs[1]:
     st.subheader("Transfer Efficiency & Discharge Effectiveness Over Time")
 
-    if show_ratios:
-        fig = go.Figure()
-        for metric, name, color in [
-            ("TransferEfficiency",    "Transfer Efficiency",     "#4c78a8"),
-            ("DischargeEffectiveness", "Discharge Effectiveness", "#54a24b"),
-            ("PipelineThroughput",    "Pipeline Throughput",     "#f58518"),
-        ]:
+    selected = [
+        m for m, on in [
+            (("TransferEfficiency",     "Transfer Efficiency",     "#4c78a8", thr_te), show_te),
+            (("DischargeEffectiveness", "Discharge Effectiveness", "#54a24b", thr_de), show_de),
+            (("PipelineThroughput",     "Pipeline Throughput",     "#f58518", thr_pt), show_pt),
+        ] if on
+    ]
+    if selected:
+        # Each ratio lives on a very different scale (DE ≈ 2%, TE ≈ 70%, PT ≈ 160%),
+        # so each gets its own panel and its own threshold line.
+        for metric, name, color, thr in selected:
+            s = df[metric]
+            below = s < thr
+            fig = go.Figure()
+            fig.add_trace(go.Scatter(x=df["Date"], y=s, name=name, line=dict(color=color, width=2)))
             fig.add_trace(
-                go.Scatter(x=df["Date"], y=df[metric], name=name, line=dict(color=color, width=2))
+                go.Scatter(x=df.loc[below, "Date"], y=s[below], mode="markers",
+                           marker=dict(color="#d9534f", size=6), name="Below threshold")
             )
-        fig.add_hline(y=0.5, line_dash="dash", line_color="#d9534f",
-                      annotation_text="50% threshold", annotation_position="top left")
-        fig.update_layout(hovermode="x unified", yaxis_title="Ratio (0–1+)", height=380,
-                          legend=dict(orientation="h", yanchor="bottom", y=1.02))
-        st.plotly_chart(fig, use_container_width=True)
+            fig.add_hline(y=thr, line_dash="dash", line_color="#d9534f",
+                          annotation_text=f"Alert threshold {thr:.1%}", annotation_position="top left")
+            fig.update_layout(title=f"{name} — {int(below.sum())} of {len(s)} reports below threshold",
+                              hovermode="x unified", yaxis_tickformat=".1%", height=300,
+                              legend=dict(orientation="h", yanchor="bottom", y=1.02))
+            st.plotly_chart(fig, use_container_width=True)
     else:
-        st.info("Enable 'Show ratio metrics' in the sidebar.")
+        st.info("Turn on at least one ratio metric in the sidebar.")
 
     if show_forecast:
         st.subheader(f"Discharge Forecast (Next 90 Days) · {clearance_target}-Day Clearance Target")
@@ -436,6 +505,15 @@ with tabs[3]:
                           hovermode="x unified")
     st.plotly_chart(fig_std, use_container_width=True)
     st.caption("Higher values = less consistent placement outcomes.")
+
+    st.subheader("Outcome Stability Score (0–100, 30-report window)")
+    fig_ss = go.Figure()
+    fig_ss.add_trace(go.Scatter(x=df["Date"], y=stab_series, name="Stability score",
+                                line=dict(color="#4c78a8", width=2)))
+    fig_ss.update_layout(height=300, yaxis_title="Score", yaxis_range=[0, 100],
+                         hovermode="x unified")
+    st.plotly_chart(fig_ss, use_container_width=True)
+    st.caption("100 × (1 − coefficient of variation). Higher = more consistent placements.")
 
 
 # ══════════════════════════════════════════════════════════════════════════════

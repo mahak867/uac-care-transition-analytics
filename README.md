@@ -69,16 +69,24 @@ All 7 tests cover:
 | Discharge Effectiveness Index | `Discharged ÷ HHS Care` |
 | Pipeline Throughput | `Total exits ÷ Total entries` |
 | Backlog Accumulation Rate | `7-day rolling ΔHHSCare` |
-| Outcome Stability Score | `30-day rolling σ(DischargeEffectiveness)` |
+| Outcome Stability Score | `100 × (1 − σ/μ)` of DischargeEffectiveness over 30 reports (0–100) |
+
+---
+
+## User Controls (sidebar)
+
+- **Date range** selection: every KPI, chart and alert recalculates for the chosen window
+- **Ratio metric toggles**: show or hide Transfer Efficiency, Discharge Effectiveness and Pipeline Throughput one at a time
+- **Threshold-based alerts**: set minimums for the three ratios and a maximum for backlog growth. A red banner under the KPIs lists every breach on the latest report, and the charts draw the threshold lines and mark the reports that cross them in red
 
 ---
 
 ## Dashboard Tabs
 
 1. **Pipeline Flow** — population curves, inflow/outflow bars, backlog rate
-2. **Transfer & Discharge** — ratio time-series, 90-day discharge forecast, capacity gap alert
+2. **Transfer & Discharge** — one panel per ratio, with an alert threshold line and the breaching reports marked, plus the 90-day discharge forecast, capacity gap alert
 3. **Bottleneck Detection** — stagnation periods (calendar-day corrected), sudden drop events, weekday vs weekend analysis
-4. **Outcome Trends** — month-over-month placement table, outcome stability volatility
+4. **Outcome Trends** — month-over-month placement table, outcome stability volatility and the 0–100 Outcome Stability Score
 5. **Statistics** — regime comparison (Mann-Whitney U, violin plots), distribution summary
 6. **Data** — filtered preview + CSV download
 

@@ -209,3 +209,24 @@ def backlog_rate(df: pd.DataFrame, window: int = 7) -> pd.Series:
     Positive = growing backlog; negative = clearing.
     """
     return df[COL_HHS].rolling(window, min_periods=1).mean().diff()
+
+
+# ── outcome stability ─────────────────────────────────────────────────────────
+
+def outcome_stability_score(
+    df: pd.DataFrame,
+    col: str = "DischargeEffectiveness",
+    window: int = 30,
+) -> pd.Series:
+    """
+    Rolling 0–100 score of how consistent placement outcomes are:
+        100 × max(0, 1 − CV), where CV = rolling std ÷ rolling mean of *col*.
+
+    100 = perfectly steady discharge effectiveness; 0 = the spread is as large
+    as (or larger than) the average itself.
+    """
+    s = df[col]
+    mean = s.rolling(window, min_periods=5).mean()
+    std = s.rolling(window, min_periods=5).std()
+    cv = std / mean.replace(0, np.nan)
+    return (100 * (1 - cv)).clip(lower=0, upper=100)
